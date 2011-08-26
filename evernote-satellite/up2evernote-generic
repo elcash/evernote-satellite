@@ -1,0 +1,108 @@
+#!/bin/bash
+
+#
+# upload attachment(s) to evernote via email
+# 
+
+MY_EVERNOTE_EMAIL=elcash.abcd123@m.evernote.com
+OTHER_TAGS_ARR=(othertag1 othertag2 othertag3)
+NOTEBOOK_PART_ARR=(notebook1 notebook2)
+SEASON_PART_ARR=(ss fw)
+YEAR_PART_ARR=(`seq -w 02 13`) # seq -w pads with leading zeros
+
+USAGE="Usage: $0 [-m<message> -s<subject>] file1 [file2 ... fileN]
+
+Upload email attachments to evernote, one attachment per note.  Parse filenames
+for TAGs and NOTEBOOKs, placing and tagging new notes appropriately.
+
+To get season and year tags applied right, use fw11 or ss10
+
+TODO: allow parentesis inside filenames
+TODO: evernote api auto get waht tags / notebooks to look for?
+"
+UPLOAD_MESSAGE=
+UPLOAD_SUBJECT=
+UPLOAD_NOTEBOOK=
+
+if [ "$#" == "0" ]; then
+    echo "$USAGE"
+    exit 1
+fi
+
+while getopts "m:s:h" options; do
+    case $options in
+        m)
+            mflag=1
+            mval="$OPTARG";;
+        s)
+            sflag=1
+            sval="$OPTARG";;
+        h)
+            echo "$USAGE"
+            exit 1;;
+    esac
+done
+shift $(($OPTIND -1))
+
+send()
+{
+    if [ ! -z "$mflag" ]; then
+        UPLOAD_MESSAGE=$mval
+    else
+        UPLOAD_MESSAGE="`basename $1`"
+    fi
+
+    if [ ! -z "$sflag" ]; then
+        UPLOAD_SUBJECT=$sval
+    else
+        UPLOAD_SUBJECT="`basename $1`"
+    fi
+
+    if [ ! -f "$1" ]; then
+        echo "$1 was not a file."
+        exit 1
+    else
+        parse_filename_for_tags "$1"
+        mutt -s "$UPLOAD_SUBJECT $TAGS $NOTEBOOK" -a "$1" -- $MY_EVERNOTE_EMAIL < <(echo "$UPLOAD_MESSAGE")
+
+        echo -e "Sent "$1" to evernote via email...\n"
+    fi
+}
+
+### using our filenames, we guess at tags and notebooks
+parse_filename_for_tags()
+{
+TAGS=
+NOTEBOOK=
+
+# we only tag with #season and #year if we have both a season AND a year
+# this should avoid some false positives
+for season_part in ${SEASON_PART_ARR[*]}; do
+    for year_part in ${YEAR_PART_ARR[*]}; do
+        if [ $(grep $season_part$year_part < <(echo $1)) ]; then
+            TAGS="$TAGS #$season_part #year_20$year_part"
+        fi
+    done
+done
+
+# other possible tags we check for
+for other_part in ${OTHER_TAGS_ARR[*]}; do
+    if [ $(grep $other_part < <(echo $1)) ]; then
+        TAGS="$TAGS #$other_part"
+    fi
+done
+
+for notebook_part in ${NOTEBOOK_PART_ARR[*]}; do
+    if [ $(grep $notebook_part < <(echo $1)) ]; then
+        NOTEBOOK="@$notebook_part"
+    fi
+done
+}
+
+
+# (( "$#" )) evaluates TRUE if numargs greater than 0
+while (( "$#" )); do
+    send "$1"
+    shift
+done
+exit 0
