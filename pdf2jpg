@@ -1,0 +1,36 @@
+#!/bin/bash
+
+#
+# turn a pdf into a series of jpegs for faster future scanning in evernote
+#
+
+# After this, don't use up2evernote 'cause each jpg will be a separate note
+# try mutt -a *.jpg -- my.evernote.email@m.evernote.com or such...
+
+# check for netpbm and imagemagick
+exists()
+{
+    if command -v $1 &>/dev/null
+    then
+        echo "Found command $1..."
+    else
+        echo "Didn't find $1 - $0 requires netpbm and imagemagick - Halting..."
+        exit 1
+    fi
+}
+
+exists convert
+exists pdftoppm
+
+if [ $# -ne 1 ]; then
+    echo "USAGE: $0 takes a single pdf file as an argument - Halting..."
+    exit 1
+fi
+
+# pdftopgm (greymap) gives best readability
+pdftoppm $1 $(basename ${1})
+for i in *.ppm; do
+    convert $i -trim -negate $i.jpg
+    echo $i
+done
+rm -f *.ppm
